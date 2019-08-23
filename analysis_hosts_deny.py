@@ -8,6 +8,7 @@ Created on 2019-08-19
 import time
 import json
 import requests
+import logging
 
 import pymongo
 
@@ -21,7 +22,7 @@ import pymongo
 
 def get_hosts_deny():
     hosts_list = []
-    file_hosts_deny = '.\hosts.deny'
+    file_hosts_deny = './hosts.deny'
     with open(file_hosts_deny) as f:
         for line in f.readlines():
             if "ALL: " == line[:5]:
@@ -35,27 +36,43 @@ def get_hosts_location(ip):
     }
     # url = "http://ip.taobao.com/service/getIpInfo.php?ip=" + ip
     url = "http://ip-api.com/json/" + ip + "?lang=zh-CN"
-    result = requests.get(url,headers=headers)
-    if result.status_code == 200:
-        content = json.loads(result.text)
-        if content["status"] == "success":
-            # print(content)
-            return content
-    else:
-        print("error:result.status_code:%s"%result.status_code)
+    try:
+        result = requests.get(url,headers=headers)
+        if result.status_code == 200:
+            content = json.loads(result.text)
+            if content["status"] == "success":
+                # print(content)
+                return content
+        else:
+            print("error:result.status_code:%s"%result.status_code)
+
+    except Exception as e:
+        print("error:"+ip)
 
 def write2file(location):
-    with open('.\location.txt','a',encoding='utf-8') as f:
+    with open('./location.txt','a',encoding='utf-8') as f:
         f.write(json.dumps(location)+'\n')
 
 def load_file():
     location_list = []
-    with open('.\location.txt','r',encoding='utf-8') as f:
+    with open('./location.txt','r',encoding='utf-8') as f:
         for line in f.readlines():
             location_list.append(json.loads(line))
             # print(json.loads(line))
 
     return location_list
+
+def find_db(ip):
+    ip_flag = False
+    conn = pymongo.MongoClient('192.168.123.100', 27017)
+    db = conn.mydata
+    my_collection = db.hosts_deny
+    if my_collection.find_one({"query": ip}):
+        ip_flag = True
+    else:
+        pass
+    conn.close()
+    return ip_flag
 
 def write2db(location_info):
 
@@ -64,22 +81,25 @@ def write2db(location_info):
     db = conn.mydata
     # 使用hosts_deny集合，没有则自动创建
     my_collection = db.hosts_deny
-    if my_collection.find_one({"query":location_info["query"]}):
-        print("已存在")
-        pass
-    else:
-        my_collection.insert(location_info)
-        print("插入数据库")
+    # if my_collection.find_one({"query":location_info["query"]}):
+    #     pass
+    # else:
+    #     my_collection.insert(location_info)
+    #     print("插入数据库")
+    my_collection.insert(location_info)
 
     conn.close()
 
 
 def main():
     for ip in get_hosts_deny():
-        a = get_hosts_location(ip)
-    #     # write2db(a)
-        write2file(a)
-        time.sleep(0.5)
+        if find_db(ip):
+            pass
+        else:
+            a = get_hosts_location(ip)
+            write2db(get_hosts_location(ip))
+            time.sleep(1)
+    #     write2file(a)
     # for line in load_file():
         # print(line)
     # for line in load_file():
